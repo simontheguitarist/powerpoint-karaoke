@@ -12,7 +12,6 @@ import {
   round,
   roundSlide,
   slide,
-  slideSkipVote,
 } from "@/lib/db/schema";
 import { publish } from "@/lib/events";
 import { newId } from "@/lib/ids";
@@ -42,8 +41,6 @@ const actionSchema = z.discriminatedUnion("action", [
     action: z.literal("lock-deck-vote"),
     voteId: z.string(),
   }),
-  z.object({ action: z.literal("lock-preview"), roundId: z.string() }),
-  z.object({ action: z.literal("start-presenting"), roundId: z.string() }),
   z.object({ action: z.literal("next-slide"), roundId: z.string() }),
   z.object({ action: z.literal("prev-slide"), roundId: z.string() }),
   z.object({
@@ -79,9 +76,6 @@ async function transitionRound(
     };
   }
   const patch: Record<string, unknown> = { state: to };
-  if (to === "preview" && !r.startedAt) {
-    patch.startedAt = new Date();
-  }
   if (to === "done") {
     patch.endedAt = new Date();
   }
@@ -129,8 +123,9 @@ async function createRoundForDeck(
         presenterParticipantId,
         deckId,
         orderIndex: order,
-        state: "preview",
+        state: "presenting",
         startedAt: new Date(),
+        currentSlideIndex: 0,
       })
       .run();
     for (let i = 0; i < slides.length; i++) {
@@ -155,11 +150,15 @@ async function createRoundForDeck(
   });
   publish(roomId, {
     event: "round-state",
-    data: { roundId, state: "preview" },
+    data: { roundId, state: "presenting" },
   });
   publish(roomId, {
     event: "state",
     data: { state: "round", currentRoundId: roundId },
+  });
+  publish(roomId, {
+    event: "slide-change",
+    data: { roundId, slideIndex: 0 },
   });
   return { roundId };
 }
@@ -349,63 +348,6 @@ export async function POST(
         },
       });
       return Response.json({ winnerDeckId, roundId: r.roundId, tally: Object.fromEntries(tally) });
-    }
-
-    case "lock-preview": {
-      const r = await db.query.room.findFirst({ where: eq(room.id, roomId) });
-      if (!r) return Response.json({ error: "Not found" }, { status: 404 });
-      const judges = await db
-        .select()
-        .from(participant)
-        .where(eq(participant.roomId, roomId));
-      const judgeCount = judges.filter((p) => p.role === "player").length;
-      const threshold = Math.max(
-        1,
-        Math.ceil((judgeCount * r.config.skipThresholdPct) / 100)
-      );
-
-      const rsRows = await db
-        .select()
-        .from(roundSlide)
-        .where(eq(roundSlide.roundId, action.roundId));
-      const skippedIds: string[] = [];
-      for (const rs of rsRows) {
-        const voteRows = await db
-          .select()
-          .from(slideSkipVote)
-          .where(eq(slideSkipVote.roundSlideId, rs.id));
-        if (voteRows.length >= threshold) {
-          db.update(roundSlide)
-            .set({ skipped: true })
-            .where(eq(roundSlide.id, rs.id))
-            .run();
-          skippedIds.push(rs.id);
-        }
-      }
-      publish(roomId, {
-        event: "slide-locked",
-        data: { roundId: action.roundId, skipped: skippedIds, threshold },
-      });
-      return Response.json({ skipped: skippedIds, threshold });
-    }
-
-    case "start-presenting": {
-      const t = await transitionRound(action.roundId, "presenting");
-      if ("error" in t)
-        return Response.json({ error: t.error }, { status: t.status });
-      db.update(round)
-        .set({ currentSlideIndex: 0 })
-        .where(eq(round.id, action.roundId))
-        .run();
-      publish(roomId, {
-        event: "round-state",
-        data: { roundId: action.roundId, state: "presenting" },
-      });
-      publish(roomId, {
-        event: "slide-change",
-        data: { roundId: action.roundId, slideIndex: 0 },
-      });
-      return Response.json({ ok: true });
     }
 
     case "next-slide":

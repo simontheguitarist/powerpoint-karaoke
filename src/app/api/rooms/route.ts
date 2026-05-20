@@ -62,8 +62,6 @@ export async function POST(req: Request) {
         state: "lobby",
         config: {
           maxRoundSeconds: 180,
-          previewSeconds: 30,
-          skipThresholdPct: 50,
           rubric: ["Humor", "Recovery", "Confidence", "Slide Mockery"],
         },
       })

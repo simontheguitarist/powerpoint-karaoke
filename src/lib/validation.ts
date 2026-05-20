@@ -30,8 +30,6 @@ export const generateSchema = z.object({
 
 export const roomConfigSchema = z.object({
   maxRoundSeconds: z.coerce.number().int().min(30).max(600).default(180),
-  previewSeconds: z.coerce.number().int().min(10).max(120).default(30),
-  skipThresholdPct: z.coerce.number().int().min(20).max(90).default(50),
   rubric: z
     .array(z.string().trim().min(1).max(32))
     .min(1)

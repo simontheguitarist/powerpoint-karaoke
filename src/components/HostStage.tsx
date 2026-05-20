@@ -20,7 +20,7 @@ export function HostStage({
   roomId: string;
   myDecks: Deck[];
 }) {
-  const { data, loading, skipVotes, ratingProgress, leaderboard, results } =
+  const { data, loading, ratingProgress, leaderboard, results } =
     useRoom(roomId);
   const searchParams = useSearchParams();
   const initialDeckId = searchParams.get("deck");
@@ -190,20 +190,6 @@ export function HostStage({
         />
       )}
 
-      {/* PREVIEW */}
-      {round && round.state === "preview" && (
-        <PreviewView
-          round={round}
-          presenter={presenter?.displayName ?? "Presenter"}
-          skipVotes={skipVotes}
-          busy={busy}
-          onLockAndStart={async () => {
-            await post({ action: "lock-preview", roundId: round.id });
-            await post({ action: "start-presenting", roundId: round.id });
-          }}
-        />
-      )}
-
       {/* PRESENTING */}
       {round && round.state === "presenting" && currentSlide && (
         <>
@@ -367,109 +353,6 @@ function LobbyView({
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function PreviewView({
-  round,
-  presenter,
-  skipVotes,
-  busy,
-  onLockAndStart,
-}: {
-  round: NonNullable<ReturnType<typeof useRoom>["data"]>["currentRound"];
-  presenter: string;
-  skipVotes: Record<string, number>;
-  busy: boolean;
-  onLockAndStart: () => Promise<void>;
-}) {
-  if (!round) return null;
-  return (
-    <div className="absolute inset-0 pt-16 pb-8 px-8 flex flex-col">
-      <div className="text-center mb-4">
-        <div className="text-sm uppercase tracking-[0.3em] opacity-50">
-          Audience preview · cut the boring ones
-        </div>
-        <div className="display text-4xl mt-2">
-          {presenter} <span className="opacity-50">on</span>{" "}
-          <span className="italic">&ldquo;{round.deck.title}&rdquo;</span>
-        </div>
-      </div>
-      <div className="flex-1 grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 overflow-auto px-2 pb-2">
-        {round.slides.map((rs) => {
-          const votes = skipVotes[rs.slideId] ?? 0;
-          return (
-            <div
-              key={rs.id}
-              className={`relative aspect-video rounded-xl border border-white/10 overflow-hidden bg-white ${
-                rs.skipped ? "opacity-30" : ""
-              }`}
-            >
-              <PreviewSlide
-                deckId={round.deck.id}
-                src={rs.src}
-                kind={rs.kind}
-              />
-              <div className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-full bg-black/70 backdrop-blur font-mono text-[10px]">
-                {String(rs.orderIndex + 1).padStart(2, "0")}
-              </div>
-              {votes > 0 && (
-                <div className="absolute bottom-1.5 right-1.5 px-2 py-0.5 rounded-full bg-flame text-white text-[10px] font-mono">
-                  skip {votes}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-      <div className="flex justify-center pt-4">
-        <button
-          onClick={onLockAndStart}
-          disabled={busy}
-          className="btn btn-flame disabled:opacity-50"
-        >
-          Lock in &amp; start presenting →
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function PreviewSlide({
-  deckId,
-  src,
-  kind,
-}: {
-  deckId: string;
-  src: string;
-  kind: "image" | "html";
-}) {
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(0);
-
-  useEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    const update = () => {
-      const w = el.getBoundingClientRect().width;
-      if (w > 0) setScale(w / 1280);
-    };
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  return (
-    <div ref={wrapRef} className="absolute inset-0 overflow-hidden">
-      {kind === "image" ? (
-        <SlideRender deckId={deckId} src={src} kind="image" fit="cover" inert />
-      ) : scale > 0 ? (
-        <SlideRender deckId={deckId} src={src} kind="html" scale={scale} inert />
-      ) : (
-        <div className="absolute inset-0 shimmer" />
-      )}
     </div>
   );
 }

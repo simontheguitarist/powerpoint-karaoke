@@ -70,6 +70,37 @@ async function makeThumbnail(srcPng: string, deckId: string) {
     .toFile(dest);
 }
 
+async function renderHtmlThumbnail(slidePath: string, deckId: string) {
+  // Render the actual HTML slide via headless Chromium so the library
+  // thumb looks like the real first slide.
+  const { chromium } = await import("playwright");
+  const browser = await chromium.launch({
+    headless: true,
+    // In Docker we use the system `chromium` package (set via env);
+    // in dev Playwright's bundled Chromium is used.
+    executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+    args: ["--no-sandbox", "--disable-dev-shm-usage"],
+  });
+  try {
+    const page = await browser.newPage({
+      viewport: { width: 1280, height: 720 },
+      deviceScaleFactor: 1,
+    });
+    await page.goto("file://" + slidePath, { waitUntil: "load", timeout: 15000 });
+    const buf = await page.screenshot({
+      type: "png",
+      clip: { x: 0, y: 0, width: 1280, height: 720 },
+    });
+    const dest = path.join(deckDir(deckId), "thumb.png");
+    await sharp(buf)
+      .resize({ width: 800, height: 450, fit: "cover" })
+      .png()
+      .toFile(dest);
+  } finally {
+    await browser.close().catch(() => {});
+  }
+}
+
 async function placeholderThumbnail(deckId: string, title: string) {
   const safe = title.replace(/[<&"']/g, "").slice(0, 80);
   const svg = Buffer.from(
@@ -233,19 +264,33 @@ export async function processUpload({ deckId, files }: UploadInput) {
       throw new Error("No slides produced from upload");
     }
 
-    // Thumbnail: from first image slide if any, else generated placeholder
+    // Thumbnail: PNG decks → resize slide 1; HTML decks → headless
+    // render of slide-01.html; fallback to SVG placeholder if Chromium
+    // isn't available (e.g. dev box without Playwright browsers).
     const firstImage = slides.find((s) => s.kind === "image");
+    const firstHtml = slides.find((s) => s.kind === "html");
     if (firstImage) {
       const firstAbs = path.resolve(
         deckSlidesDir(deckId),
         path.basename(firstImage.src)
       );
       await makeThumbnail(firstAbs, deckId);
-    } else {
-      await placeholderThumbnail(
-        deckId,
-        skillMeta?.title ?? "AI deck"
+    } else if (firstHtml) {
+      const firstAbs = path.resolve(
+        deckSlidesDir(deckId),
+        path.basename(firstHtml.src)
       );
+      try {
+        await renderHtmlThumbnail(firstAbs, deckId);
+      } catch (e) {
+        console.warn(
+          "[upload] HTML thumbnail render failed, falling back to placeholder:",
+          e instanceof Error ? e.message : e
+        );
+        await placeholderThumbnail(deckId, skillMeta?.title ?? "AI deck");
+      }
+    } else {
+      await placeholderThumbnail(deckId, skillMeta?.title ?? "AI deck");
     }
 
     db.transaction(() => {

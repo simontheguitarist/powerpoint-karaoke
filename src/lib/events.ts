@@ -12,8 +12,6 @@ const rooms = new Map<string, Set<Writer>>();
 export type RoomEvent =
   | { event: "state"; data: unknown }
   | { event: "round-state"; data: unknown }
-  | { event: "preview-vote"; data: unknown }
-  | { event: "slide-locked"; data: unknown }
   | { event: "slide-change"; data: unknown }
   | { event: "round-timer"; data: unknown }
   | { event: "rating-count"; data: unknown }

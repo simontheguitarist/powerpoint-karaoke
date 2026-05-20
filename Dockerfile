@@ -44,12 +44,14 @@ WORKDIR /app
 # System binaries used by the upload pipeline:
 #   - libreoffice-impress: PPTX → PDF (headless via `soffice`)
 #   - poppler-utils:       PDF → PNG  (via `pdftoppm`)
-#   - fonts:               so libreoffice + sharp can render decent text
+#   - chromium:            HTML slide → PNG thumbnails (via Playwright)
+#   - fonts:               so libreoffice / sharp / chromium render decent text
 #   - tini:                proper signal handling for our background jobs
 RUN apt-get update && apt-get install -y --no-install-recommends \
       libreoffice-impress \
       libreoffice-core \
       poppler-utils \
+      chromium \
       fonts-dejavu-core \
       fonts-noto-color-emoji \
       fonts-liberation \
@@ -65,7 +67,9 @@ ENV NODE_ENV=production \
     DATABASE_URL=/data/pk.db \
     STORAGE_DIR=/data/storage \
     SOFFICE_PATH=/usr/bin/soffice \
-    PDFTOPPM_PATH=/usr/bin/pdftoppm
+    PDFTOPPM_PATH=/usr/bin/pdftoppm \
+    PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium \
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
 # Non-root user
 RUN groupadd --system --gid 1001 nodejs \

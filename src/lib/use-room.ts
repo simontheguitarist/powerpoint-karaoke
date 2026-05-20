@@ -32,8 +32,6 @@ export type RoomData = {
     hostUserId: string;
     config: {
       maxRoundSeconds: number;
-      previewSeconds: number;
-      skipThresholdPct: number;
       rubric: string[];
     };
   };
@@ -46,7 +44,7 @@ export type RoomData = {
   rounds: Array<{
     id: string;
     orderIndex: number;
-    state: "queued" | "preview" | "presenting" | "rating" | "done";
+    state: "presenting" | "rating" | "done";
     presenterParticipantId: string;
     deckId: string;
     currentSlideIndex: number;
@@ -71,7 +69,6 @@ export type RoomData = {
     }>;
     currentSlideIndex: number;
   } | null;
-  skipVoteTallies?: Record<string, number>;
   leaderboard?: LeaderboardRow[];
   lastResults?: RoundResults | null;
   currentDeckVote?: {
@@ -93,7 +90,6 @@ export type RoomData = {
 export function useRoom(roomId: string | null) {
   const [data, setData] = useState<RoomData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [skipVotes, setSkipVotes] = useState<Record<string, number>>({});
   const [ratingProgress, setRatingProgress] = useState<{
     received: number;
     total: number;
@@ -108,9 +104,6 @@ export function useRoom(roomId: string | null) {
     if (res.ok) {
       const j = (await res.json()) as RoomData;
       setData(j);
-      if (j.skipVoteTallies) {
-        setSkipVotes((prev) => ({ ...prev, ...j.skipVoteTallies }));
-      }
       if (j.leaderboard && j.leaderboard.length > 0) {
         setLeaderboard(j.leaderboard);
       }
@@ -145,11 +138,6 @@ export function useRoom(roomId: string | null) {
           : prev
       );
     });
-    es.addEventListener("preview-vote", (e) => {
-      const d = JSON.parse((e as MessageEvent).data);
-      setSkipVotes((prev) => ({ ...prev, [d.slideId]: d.totalVotes }));
-    });
-    es.addEventListener("slide-locked", () => fetchState());
     es.addEventListener("rating-count", (e) => {
       const d = JSON.parse((e as MessageEvent).data);
       setRatingProgress({ received: d.received, total: d.total });
@@ -188,7 +176,6 @@ export function useRoom(roomId: string | null) {
   return {
     data,
     loading,
-    skipVotes,
     ratingProgress,
     leaderboard,
     results,

@@ -9,7 +9,6 @@ import {
   round,
   roundSlide,
   slide,
-  slideSkipVote,
 } from "@/lib/db/schema";
 import { getParticipantCookie } from "@/lib/rooms/participant-cookie";
 import { leaderboard, scoreRound } from "@/lib/rooms/scoring";
@@ -88,18 +87,6 @@ export async function GET(
     }
   }
 
-  // Live skip-vote tally for the current round
-  const skipVoteTallies: Record<string, number> = {};
-  if (currentRound) {
-    for (const s of currentRound.slides) {
-      const votes = await db
-        .select()
-        .from(slideSkipVote)
-        .where(eq(slideSkipVote.roundSlideId, s.id));
-      if (votes.length > 0) skipVoteTallies[s.slideId] = votes.length;
-    }
-  }
-
   // Active deck vote (if any)
   let currentDeckVote: null | {
     id: string;
@@ -171,7 +158,6 @@ export async function GET(
     me,
     currentRound,
     currentDeckVote,
-    skipVoteTallies,
     leaderboard: board,
     lastResults,
   });

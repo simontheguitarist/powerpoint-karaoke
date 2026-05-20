@@ -2,7 +2,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useRoom } from "@/lib/use-room";
 import { JoinName } from "@/components/JoinName";
-import { PreviewCurator } from "@/components/PreviewCurator";
 import { RubricForm } from "@/components/RubricForm";
 import { SlideRender } from "@/components/SlideRender";
 
@@ -13,7 +12,7 @@ export function ParticipantApp({
   roomId: string;
   code: string;
 }) {
-  const { data, loading, skipVotes, leaderboard, refetch } = useRoom(roomId);
+  const { data, loading, leaderboard, refetch } = useRoom(roomId);
 
   if (loading || !data) {
     return (
@@ -58,17 +57,6 @@ export function ParticipantApp({
           vote={data.currentDeckVote}
           meId={me.id}
         />
-      )}
-
-      {/* Preview phase */}
-      {round && round.state === "preview" && !isPresenter && (
-        <PreviewCurator
-          round={round}
-          skipVotes={skipVotes}
-        />
-      )}
-      {round && round.state === "preview" && isPresenter && (
-        <PresenterCurtain title={round.deck.title} />
       )}
 
       {/* Presenting */}
@@ -137,23 +125,6 @@ function Lobby({
   );
 }
 
-function PresenterCurtain({ title }: { title: string }) {
-  return (
-    <div className="card p-8 text-center">
-      <div className="text-xs uppercase tracking-widest text-mute">
-        Up next
-      </div>
-      <div className="display text-5xl mt-4">You&apos;re on.</div>
-      <p className="text-mute mt-4 max-w-prose mx-auto">
-        Your deck is &quot;{title}&quot;. The audience is previewing it now —
-        cutting the boring slides for you.
-      </p>
-      <p className="text-mute mt-4 text-sm italic">
-        Don&apos;t look at anyone else&apos;s screen.
-      </p>
-    </div>
-  );
-}
 
 function Spectate({
   round,

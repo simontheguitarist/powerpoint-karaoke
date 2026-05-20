@@ -201,8 +201,6 @@ export const room = sqliteTable(
     config: text("config", { mode: "json" })
       .$type<{
         maxRoundSeconds: number;
-        previewSeconds: number;
-        skipThresholdPct: number;
         rubric: string[];
       }>()
       .notNull(),
@@ -295,10 +293,10 @@ export const round = sqliteTable(
       .references(() => deck.id, { onDelete: "restrict" }),
     orderIndex: integer("order_index").notNull(),
     state: text("state", {
-      enum: ["queued", "preview", "presenting", "rating", "done"],
+      enum: ["presenting", "rating", "done"],
     })
       .notNull()
-      .default("queued"),
+      .default("presenting"),
     currentSlideIndex: integer("current_slide_index").notNull().default(0),
     startedAt: integer("started_at", { mode: "timestamp_ms" }),
     endedAt: integer("ended_at", { mode: "timestamp_ms" }),

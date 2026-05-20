@@ -323,32 +323,36 @@ function LobbyView({
   initialDeckId?: string | null;
 }) {
   return (
-    <div className="absolute inset-0 grid grid-rows-[1fr_auto] pt-16 pb-10 px-6">
-      <div className="grid place-items-center">
-        <div className="text-center">
-          <div className="text-sm uppercase tracking-[0.3em] opacity-50">
+    <div className="absolute inset-0 overflow-y-auto pt-16 pb-10 px-6">
+      {/* Code + QR — code dominates the room, QR sits next to it on
+          wide screens, stacks underneath on narrow ones. */}
+      <div className="flex flex-col lg:flex-row items-center lg:items-end justify-center gap-8 lg:gap-12 mt-2 mb-10 max-w-6xl mx-auto">
+        <div className="text-center lg:text-left">
+          <div className="text-xs uppercase tracking-[0.3em] opacity-50">
             Join with your phone
           </div>
-          <div className="display text-[14vw] leading-none mt-4 tracking-[0.08em]">
+          <div className="display text-[clamp(5rem,11vw,11rem)] leading-[0.95] mt-2 tracking-[0.08em]">
             {code}
           </div>
-          <div className="mt-10 inline-flex items-center gap-6 rounded-3xl bg-white text-ink px-6 py-5">
-            <QRCode text={joinUrl} size={120} light="#ffffff" />
-            <div className="text-left">
-              <div className="text-[10px] uppercase tracking-[0.3em] text-mute">
-                Scan to join
-              </div>
-              <div className="display text-xl mt-1 max-w-xs break-all leading-tight">
-                {joinUrl.replace(/^https?:\/\//, "")}
-              </div>
-            </div>
-          </div>
-          <div className="mt-6 opacity-60 text-sm">
+          <div className="mt-3 opacity-60 text-sm">
             {players.length} {players.length === 1 ? "person" : "people"} in the
             room
           </div>
         </div>
+        <div className="inline-flex items-center gap-5 rounded-3xl bg-white text-ink px-5 py-4 shrink-0">
+          <QRCode text={joinUrl} size={120} light="#ffffff" />
+          <div className="text-left">
+            <div className="text-[10px] uppercase tracking-[0.3em] text-mute">
+              Scan to join
+            </div>
+            <div className="display text-lg mt-1 max-w-[16ch] break-all leading-tight">
+              {joinUrl.replace(/^https?:\/\//, "")}
+            </div>
+          </div>
+        </div>
       </div>
+
+      {/* Setup card sits below — full width up to a sensible max. */}
       <div className="text-ink">
         <div className="mx-auto max-w-2xl">
           <div className="bg-white text-ink rounded-3xl">

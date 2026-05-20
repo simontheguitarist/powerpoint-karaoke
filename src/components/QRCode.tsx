@@ -32,6 +32,20 @@ export function QRCode({
     };
   }, [text, size, dark, light]);
 
+  if (!url) {
+    return (
+      <div
+        className={className}
+        style={{
+          width: size,
+          height: size,
+          background: light,
+        }}
+        aria-label={`QR placeholder for ${text}`}
+      />
+    );
+  }
+
   return (
     /* eslint-disable-next-line @next/next/no-img-element */
     <img

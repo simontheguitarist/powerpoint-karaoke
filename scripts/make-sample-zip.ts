@@ -82,12 +82,10 @@ zip.addFile(
   Buffer.from(
     slide(
       6,
-      `<h1 style="font-size:160px">Thank<br/>you.</h1><p>Refunds available at the door.</p>`,
+      `<h1 style="font-size:160px;color:#faf7f2">Thank<br/>you.</h1><p style="color:#faf7f2">Refunds available at the door.</p>`,
       "#0f0f12"
     )
-  ).toString("utf-8")
-    .replace("#0f0f12;display", "#faf7f2;display")
-    .replace("body{background:#0f0f12", "body{background:#0f0f12") as unknown as string
+  )
 );
 zip.addFile(
   "pk-deck-sample/meta.json",

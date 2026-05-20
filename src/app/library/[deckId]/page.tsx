@@ -3,8 +3,10 @@ import { notFound } from "next/navigation";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { deck, deckTag, slide } from "@/lib/db/schema";
+import { getOptionalUser } from "@/lib/session";
 import { SlideThumb } from "@/components/SlideThumb";
 import { StartGameButton } from "@/components/StartGameButton";
+import { DeleteDeckButton } from "@/components/DeleteDeckButton";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +34,9 @@ export default async function DeckDetailPage({
   const { deckId } = await params;
   const d = await db.query.deck.findFirst({ where: eq(deck.id, deckId) });
   if (!d) notFound();
+
+  const me = await getOptionalUser();
+  const isOwner = me?.id === d.ownerId;
 
   const tags = (await db.select().from(deckTag).where(eq(deckTag.deckId, deckId))).map(
     (t) => t.tag
@@ -114,6 +119,22 @@ export default async function DeckDetailPage({
           ))}
         </div>
       </section>
+
+      {isOwner && (
+        <section className="mt-20 border-t pt-10">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h3 className="display text-2xl">Danger zone</h3>
+              <p className="text-sm text-mute mt-1 max-w-md">
+                Deleting this deck removes its slides, thumbnail, and source
+                files. Decks already used in a finished game stay in your past
+                leaderboards.
+              </p>
+            </div>
+            <DeleteDeckButton deckId={d.id} title={d.title} />
+          </div>
+        </section>
+      )}
     </div>
   );
 }

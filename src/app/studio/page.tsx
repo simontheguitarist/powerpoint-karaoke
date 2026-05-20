@@ -49,6 +49,12 @@ export default async function StudioPage() {
           <Link href="/studio/upload" className="btn btn-primary">
             Upload a deck
           </Link>
+          <Link
+            href="/studio/tokens"
+            className="btn btn-ghost text-xs"
+          >
+            Tokens
+          </Link>
         </div>
       </header>
 

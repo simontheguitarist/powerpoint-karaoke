@@ -23,46 +23,51 @@ Rules:
 
 const MINIFIED_SKILL = `---
 name: pk-deck
-description: Generate a PowerPoint Karaoke deck — a folder of intentionally absurd HTML slides on a topic, zipped for upload. Trigger on "make a pk deck", "powerpoint karaoke deck", "generate karaoke slides", "pkdeck".
+description: Generate a PowerPoint Karaoke deck — a folder of intentionally absurd HTML slides on a topic, zipped and (optionally) auto-uploaded to the PK app. Trigger on "make a pk deck", "powerpoint karaoke deck", "generate karaoke slides", "pkdeck".
 ---
 
 # pk-deck
 
-Generate a folder of intentionally absurd HTML slides for the PowerPoint Karaoke party game, then zip it for upload.
+Generate a folder of intentionally absurd HTML slides for the PowerPoint Karaoke party game, zip it, and (after asking) auto-upload it to the user's PK app.
 
 ## Inputs (ask if missing)
 
 - **topic** (required)
 - **slide count** (5–20, default 10)
-- **spice**: mild (PG), medium (mild profanity ok), spicy (cursed late-night, profanity ok). Never include slurs, sexual content, or real-person attacks at any level.
-
-If the user gives only a topic, pick sensible defaults and tell them what you chose.
+- **spice**: mild (PG), medium (mild profanity ok), spicy (cursed late-night, profanity ok). Never slurs, sexual content, or real-person attacks at any level.
 
 ## Output
 
-Create folder \`pk-deck-<slug>/\` in cwd (where \`<slug>\` is a lowercase hyphenated short name from the topic). Inside:
+Create folder \`pk-deck-<slug>/\` in cwd. Inside:
 
-1. Write exactly N HTML files: \`slide-01.html\`, \`slide-02.html\`, ..., zero-padded to 2 digits.
-2. Each file is a complete standalone HTML doc with inline \`<style>\`, designed for 1280x720. No external assets — only inline SVG, CSS gradients, unicode, emoji, system fonts (Georgia, Helvetica, Times, monospace). Start each file with:
+1. Write exactly N HTML files: \`slide-01.html\` … \`slide-NN.html\`, zero-padded.
+2. Each is a complete standalone HTML doc with inline \`<style>\`, sized 1280x720. No external assets — only inline SVG, CSS gradients, unicode, emoji, system fonts. Start each with:
    \`<!doctype html><html><head><meta charset="utf-8"><style>html,body{width:1280px;height:720px;margin:0;overflow:hidden;font-family:Georgia,serif}</style></head><body>\`
-3. **Visual variety**: every slide looks distinctly different — vary background, typography (mix serif/sans/mono, mix scales), layout, color palette.
-4. **Content is absurd, not coherent.** PPT Karaoke is funny because the presenter improvises — slides that "make sense" defeat the game. Mismatched titles vs bullets, charts with nonsense axes, quotes attributed to nobody, contradictory lists, giant-emoji slides, unhinged "key takeaways".
-5. Required mix: a title slide (slide 1), at least one chart/diagram (inline SVG), one quote slide, one list slide ("5 reasons…"), one mostly-visual slide, and a closing slide.
+3. **Visual variety**: every slide distinctly different (background, typography, layout, palette).
+4. **Content is absurd, not coherent.** Mismatched titles vs bullets, nonsense chart axes, fake quotes, contradictory lists, giant-emoji slides, unhinged takeaways.
+5. Required mix: title (slide 1), one chart/diagram, one quote, one list, one mostly-visual, a closer.
 
-## meta.json
+## meta.json (after slides)
 
-After all slides, write \`meta.json\` in the same folder:
-\`{"title":"<short, max 80>","description":"<one sentence, max 200>","tags":["3-5","short","lowercase","words"]}\`
+\`{"title":"<short, max 80>","description":"<one sentence, max 200>","tags":["3-5","short","lowercase"]}\`
 
 ## Zip
 
 \`zip -rq pk-deck-<slug>.zip pk-deck-<slug>\`
 
-## Report
+## Upload (ask the user first)
 
-Print the absolute path of the zip and tell the user to upload it at Studio → Upload.
+Ask: *"Upload it to your PK app? (yes/no)"*. If no, print the zip path and stop.
 
-Be quiet while you work — no per-slide narration.`;
+If yes:
+
+1. Read \`~/.claude/.pk-deck.json\`. If missing or incomplete, ask for app URL (default \`http://localhost:3000\`) and personal token (from \`<URL>/studio/tokens\`, starts with \`pkr_\`). Save back to that file, mode 0600.
+2. \`curl --fail -sS -X POST "<URL>/api/decks/upload" -H "Authorization: Bearer <TOKEN>" -F "title=<topic>" -F "spice=<spice>" -F "files=@pk-deck-<slug>.zip"\`
+3. On 200: parse \`id\`, print \`✓ Uploaded. Open it: <URL>/library/<id>\`.
+4. On 401: delete the stale token from the config, offer to retry once with a fresh token.
+5. On other errors: surface the response body.
+
+Be quiet — no per-slide narration.`;
 
 export default async function GeneratePage() {
   await getUserOrRedirect();
@@ -93,9 +98,22 @@ After it's installed, list the file to confirm and tell me I can now trigger it 
       </h1>
       <p className="text-mute mt-4 max-w-lg leading-relaxed">
         Generation runs in <em>your</em> Claude Code session — not on this
-        server. Pick a method, get a{" "}
-        <span className="font-mono">.zip</span>, drop it on the upload page.
+        server. Pick a method below, get a{" "}
+        <span className="font-mono">.zip</span>. The skill can also upload it
+        straight here when you say yes.
       </p>
+
+      <div className="mt-6 card p-5 flex flex-wrap items-center justify-between gap-3 bg-canvas-2/40">
+        <div className="text-sm">
+          <div className="font-medium">Want auto-upload from Claude?</div>
+          <div className="text-mute text-xs mt-0.5">
+            Generate a personal token to paste once when the skill asks.
+          </div>
+        </div>
+        <Link href="/studio/tokens" className="btn btn-primary text-xs">
+          Manage tokens →
+        </Link>
+      </div>
 
       {/* METHOD 1 */}
       <section className="mt-12 card p-7">

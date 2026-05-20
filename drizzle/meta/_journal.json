@@ -8,6 +8,13 @@
       "when": 1779185464121,
       "tag": "0000_broken_moondragon",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1779275401800,
+      "tag": "0001_curved_wild_pack",
+      "breakpoints": true
     }
   ]
 }

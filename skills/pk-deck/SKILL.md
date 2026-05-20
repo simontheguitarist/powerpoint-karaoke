@@ -1,11 +1,11 @@
 ---
 name: pk-deck
-description: Generate a PowerPoint Karaoke deck — a folder of intentionally absurd HTML slides on a topic, ready to upload to a PowerPoint Karaoke game. Use when the user says "make a pk deck", "generate karaoke slides", "pkdeck", "powerpoint karaoke deck", or asks to produce slides for an improv presentation game.
+description: Generate a PowerPoint Karaoke deck — a folder of intentionally absurd HTML slides on a topic, zipped and (optionally) auto-uploaded to a PowerPoint Karaoke app. Use when the user says "make a pk deck", "generate karaoke slides", "pkdeck", "powerpoint karaoke deck", or asks to produce slides for an improv presentation game.
 ---
 
 # PowerPoint Karaoke deck
 
-This skill creates a folder of standalone HTML slides + a `meta.json`, then zips it for upload to a PowerPoint Karaoke web app.
+This skill creates a folder of standalone HTML slides + a `meta.json`, zips it, and (after asking) uploads it directly to the user's PowerPoint Karaoke app.
 
 ## Inputs
 
@@ -37,17 +37,12 @@ Create a folder in the **current working directory** named `pk-deck-<slug>` wher
    ```
 
    Then your slide content, then `</body></html>`.
-4. **Visual variety is the point.** Every slide should look distinctly different from the others. Vary:
-   - Background (gradient, solid, patterned)
-   - Typography (mix serif, sans, monospace; mix scales — huge headline on one, microscopic body on another)
-   - Layout (centered, top-left, full-bleed, two-column, diagonal)
-   - Color palette (don't reuse the same colors across slides)
+4. **Visual variety is the point.** Every slide should look distinctly different. Vary background, typography (mix serif/sans/mono, mix scales), layout, color palette.
 5. **Content must be absurd, not coherent.** PowerPoint Karaoke is funny because the presenter has to improvise — slides that "make sense" defeat the game. Aim for:
    - Mismatched titles that don't relate to bullet points underneath
    - Charts with absurd axes ("Sincerity vs. Pigeon Awareness")
    - Quotes attributed to nobody, or to "the wind", or to fictional people
    - Bullet lists where the bullets contradict each other
-   - "5 reasons why…" lists where the reasons are non-sequiturs
    - A whole slide that's just one giant emoji or unicode glyph
    - "Key takeaway" slides whose takeaway is unhinged
 6. Required mix across the deck:
@@ -60,7 +55,7 @@ Create a folder in the **current working directory** named `pk-deck-<slug>` wher
 
 ## Metadata file
 
-After all slides are written, create `meta.json` in the same folder with this exact shape:
+After all slides are written, create `meta.json` in the same folder:
 
 ```json
 {
@@ -74,24 +69,76 @@ Tags: 3–5 short lowercase words, no punctuation.
 
 ## Packaging
 
-After writing all files, zip the folder into `pk-deck-<slug>.zip` (sibling of the folder). Use the Bash tool:
+After writing all files, zip the folder into `pk-deck-<slug>.zip` (sibling of the folder):
 
 ```bash
 zip -rq pk-deck-<slug>.zip pk-deck-<slug>
 ```
 
-## Reporting back
+## Upload (ask the user first)
 
-After the zip is created, print exactly this (substituting the real path):
+After the zip is created, ask the user:
+
+> "Want me to upload it straight to your PK app? (yes / no)"
+
+If **no**, skip to the "Reporting back" section.
+
+If **yes**, do the following — quietly, no narration:
+
+### 1. Load saved config (if any)
+
+Read `~/.claude/.pk-deck.json`. It looks like:
+
+```json
+{
+  "url": "http://localhost:3000",
+  "token": "pkr_..."
+}
+```
+
+If both fields are present, use them. Otherwise, ask the user:
+
+1. **App URL** — default `http://localhost:3000`. Accept what they say or the default.
+2. **Personal token** — explain: *"I need a personal token to upload on your behalf. Open <URL>/studio/tokens in your browser, click 'Generate token', and paste it here. It starts with `pkr_`."*
+
+Save the config back to `~/.claude/.pk-deck.json` (create the file if missing — mode 0600). Even if the values were already there, refresh `lastUsedAt`-style timestamp by re-writing.
+
+### 2. Upload
+
+Run (replacing placeholders):
+
+```bash
+curl --fail -sS -X POST "<URL>/api/decks/upload" \
+  -H "Authorization: Bearer <TOKEN>" \
+  -F "title=<deck-meta-title-or-topic>" \
+  -F "spice=<spice>" \
+  -F "files=@pk-deck-<slug>.zip"
+```
+
+- If status 200, parse `{"id": "..."}` from the response.
+- If 401, the token is bad — show the error, delete the bad token from the config file, and offer to retry by prompting for a fresh token. Don't loop more than once.
+- For any other non-200, surface the body to the user.
+
+### 3. Report
+
+On success, print:
+
+```
+✓ Uploaded. Open it: <URL>/library/<id>
+```
+
+## Reporting back (no-upload path)
+
+If the user said no to uploading, print:
 
 ```
 Done. Your deck is ready:
 
   <absolute path to pk-deck-<slug>.zip>
 
-Next: open your PowerPoint Karaoke app, go to Studio → Upload, and drop the .zip in.
+Upload it at <URL>/studio/upload when you're ready.
 ```
 
 ## Process
 
-Write the files one at a time. After writing all slides, write `meta.json`. Then run the zip command. Then print the report. Do not narrate each slide as you write it — be quiet and ship.
+Write the slide files one at a time. Then `meta.json`. Then zip. Then ask about uploading. Don't narrate each slide as you write it — be quiet and ship.

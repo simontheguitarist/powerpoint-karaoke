@@ -86,6 +86,29 @@ export const verification = sqliteTable("verification", {
 });
 
 // ---------------------------------------------------------------------------
+// Personal API tokens (used by the pk-deck skill and other agents)
+// ---------------------------------------------------------------------------
+export const apiToken = sqliteTable(
+  "api_token",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    hash: text("hash").notNull().unique(),
+    prefix: text("prefix").notNull(),
+    suffix: text("suffix").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .default(now),
+    lastUsedAt: integer("last_used_at", { mode: "timestamp_ms" }),
+    revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [index("api_token_user_idx").on(t.userId)]
+);
+
+// ---------------------------------------------------------------------------
 // Decks
 // ---------------------------------------------------------------------------
 export const deck = sqliteTable(

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { verifyBearerToken } from "@/lib/api-token";
 import { db } from "@/lib/db";
 import { deck, deckTag } from "@/lib/db/schema";
 import { newId } from "@/lib/ids";
@@ -28,8 +29,14 @@ const ACCEPTED = new Set([
 ]);
 
 export async function POST(req: Request) {
-  const sess = await auth.api.getSession({ headers: await headers() });
-  if (!sess?.user) {
+  const h = await headers();
+  const bearerUser = await verifyBearerToken(h.get("authorization"));
+  let userId: string | null = bearerUser?.id ?? null;
+  if (!userId) {
+    const sess = await auth.api.getSession({ headers: h });
+    userId = sess?.user?.id ?? null;
+  }
+  if (!userId) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -85,7 +92,7 @@ export async function POST(req: Request) {
     db.insert(deck)
       .values({
         id: deckId,
-        ownerId: sess.user.id,
+        ownerId: userId,
         title: meta.data.title,
         description: meta.data.description,
         source: isSkillZip ? "ai" : "upload",

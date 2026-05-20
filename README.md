@@ -43,7 +43,8 @@ Image-only uploads and skill-zip uploads work without these.
 The `pk-deck` skill lives at `skills/pk-deck/`. The app serves a fresh zip of it at `GET /api/skill/pk-deck`. The Studio → Generate page guides users through either:
 
 1. **One-shot prompt** — copy a self-contained prompt into any Claude Code session
-2. **Persistent skill** — download + unzip into `~/.claude/skills/` for future use
+2. **Claude installs the skill** — copy a tiny prompt that has Claude `curl` `SKILL.md` into `~/.claude/skills/pk-deck/`
+3. **Manual install** — paste the minified `SKILL.md` into `~/.claude/skills/pk-deck/SKILL.md` (no network needed)
 
 Either path produces a folder of HTML slides + `meta.json`, zipped. Users drop the zip in Studio → Upload to add it to the library.
 
@@ -61,6 +62,57 @@ Either path produces a folder of HTML slides + `meta.json`, zipped. Users drop t
 /play/r/[code]          — participant phone view (anon ok)
 /play/projector/[id]    — fullscreen big-screen view
 ```
+
+## Deploy with Docker
+
+A multi-stage `Dockerfile` ships with the app, plus a `docker-compose.yml` for the one-command path. LibreOffice + Poppler are baked in so PPTX / PDF uploads work out of the box. A persistent volume at `/data` holds the SQLite DB and uploaded slides.
+
+### Quickstart
+
+```bash
+# Generate a real secret for production
+export BETTER_AUTH_SECRET=$(openssl rand -base64 32)
+export BETTER_AUTH_URL=https://pk.example.com
+export BETTER_AUTH_TRUSTED_ORIGINS=https://pk.example.com
+
+# Optional — adds Google sign-in
+export GOOGLE_CLIENT_ID=...
+export GOOGLE_CLIENT_SECRET=...
+
+docker compose up -d --build
+```
+
+The app is on port 3000. The `pk_data` named volume persists across `compose down`.
+
+### Runtime env vars
+
+| Var | Default | Notes |
+|---|---|---|
+| `BETTER_AUTH_SECRET` | — | **Required.** Long random string. |
+| `BETTER_AUTH_URL` | `http://localhost:3000` | Public URL of the app. |
+| `BETTER_AUTH_TRUSTED_ORIGINS` | `http://localhost:3000` | Comma-separated origins. |
+| `GOOGLE_CLIENT_ID` | empty | Optional. Set both to enable Google sign-in. |
+| `GOOGLE_CLIENT_SECRET` | empty | Authorized redirect URI: `${BETTER_AUTH_URL}/api/auth/callback/google`. |
+| `DATABASE_URL` | `/data/pk.db` | SQLite path inside the volume. |
+| `STORAGE_DIR` | `/data/storage` | Where deck files land. |
+| `PORT` / `HOSTNAME` | `3000` / `0.0.0.0` | Standard Next standalone vars. |
+
+Migrations run automatically at container start (see `scripts/migrate.js`).
+
+### Without compose
+
+```bash
+docker build -t powerpoint-karaoke .
+docker run -d --name pk \
+  -p 3000:3000 \
+  -e BETTER_AUTH_SECRET=$(openssl rand -base64 32) \
+  -e BETTER_AUTH_URL=http://localhost:3000 \
+  -e BETTER_AUTH_TRUSTED_ORIGINS=http://localhost:3000 \
+  -v pk_data:/data \
+  powerpoint-karaoke
+```
+
+Image size is ~250 MB (libreoffice is the chunky bit).
 
 ## Architecture notes
 

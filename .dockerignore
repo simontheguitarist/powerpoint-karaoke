@@ -1,0 +1,25 @@
+# Build noise
+node_modules
+.next
+.next-*
+
+# Local state
+pk.db
+pk.db-*
+storage
+.env
+.env.local
+.env.*.local
+
+# Tooling artifacts
+.playwright-mcp
+*.log
+.DS_Store
+
+# Tests / docs we don't need in the image
+README.md
+.git
+.github
+.vscode
+.idea
+*.tsbuildinfo

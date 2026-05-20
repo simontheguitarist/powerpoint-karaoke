@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "bunx tsx scripts/migrate.ts",
+    "db:migrate": "node scripts/migrate.js",
     "db:studio": "drizzle-kit studio",
     "auth:generate": "bunx @better-auth/cli generate --output src/lib/db/auth-schema.ts --config src/lib/auth.ts --y"
   },

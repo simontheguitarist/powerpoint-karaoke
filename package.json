@@ -5,27 +5,41 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "bunx tsx scripts/migrate.ts",
+    "db:studio": "drizzle-kit studio",
+    "auth:generate": "bunx @better-auth/cli generate --output src/lib/db/auth-schema.ts --config src/lib/auth.ts --y"
   },
   "dependencies": {
+    "@paralleldrive/cuid2": "^3.3.0",
+    "adm-zip": "^0.5.17",
+    "better-auth": "^1.6.11",
+    "better-sqlite3": "^12.10.0",
+    "drizzle-orm": "^0.45.2",
     "next": "16.2.6",
+    "p-queue": "^9.3.0",
+    "qrcode": "^1.5.4",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "sharp": "^0.34.5",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/adm-zip": "^0.5.8",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "drizzle-kit": "^0.31.10",
     "tailwindcss": "^4",
     "typescript": "^5"
   },
-  "ignoreScripts": [
-    "sharp",
-    "unrs-resolver"
-  ],
   "trustedDependencies": [
-    "sharp",
-    "unrs-resolver"
+    "better-sqlite3",
+    "esbuild",
+    "sharp"
   ]
 }

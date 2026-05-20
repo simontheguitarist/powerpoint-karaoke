@@ -1,9 +1,12 @@
 import { headers } from "next/headers";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
+  deck,
+  deckVote,
+  deckVoteBallot,
   participant,
   room,
   round,
@@ -21,11 +24,24 @@ export const dynamic = "force-dynamic";
 
 const actionSchema = z.discriminatedUnion("action", [
   z.object({
-    action: z.literal("add-round"),
+    action: z.literal("start-round-manual"),
     deckId: z.string(),
     presenterParticipantId: z.string(),
   }),
-  z.object({ action: z.literal("start-preview"), roundId: z.string() }),
+  z.object({
+    action: z.literal("start-round-random"),
+    presenterParticipantId: z.string(),
+    candidateDeckIds: z.array(z.string()).optional(),
+  }),
+  z.object({
+    action: z.literal("open-deck-vote"),
+    presenterParticipantId: z.string(),
+    candidateDeckIds: z.array(z.string()).min(2).max(8),
+  }),
+  z.object({
+    action: z.literal("lock-deck-vote"),
+    voteId: z.string(),
+  }),
   z.object({ action: z.literal("lock-preview"), roundId: z.string() }),
   z.object({ action: z.literal("start-presenting"), roundId: z.string() }),
   z.object({ action: z.literal("next-slide"), roundId: z.string() }),
@@ -73,6 +89,109 @@ async function transitionRound(
   return { ok: true };
 }
 
+async function createRoundForDeck(
+  roomId: string,
+  presenterParticipantId: string,
+  deckId: string
+): Promise<{ roundId: string } | { error: string; status: number }> {
+  const exists = await db.query.participant.findFirst({
+    where: eq(participant.id, presenterParticipantId),
+  });
+  if (!exists || exists.roomId !== roomId) {
+    return { error: "Presenter not in room", status: 400 };
+  }
+  const d = await db.query.deck.findFirst({ where: eq(deck.id, deckId) });
+  if (!d || d.status !== "ready") {
+    return { error: "Deck not ready", status: 400 };
+  }
+  const slides = await db
+    .select()
+    .from(slide)
+    .where(eq(slide.deckId, deckId))
+    .orderBy(asc(slide.index));
+  if (slides.length === 0) {
+    return { error: "Deck has no slides", status: 400 };
+  }
+  const lastOrder = (
+    await db
+      .select({ orderIndex: round.orderIndex })
+      .from(round)
+      .where(eq(round.roomId, roomId))
+      .orderBy(asc(round.orderIndex))
+  ).at(-1)?.orderIndex;
+  const order = (lastOrder ?? -1) + 1;
+  const roundId = newId();
+  db.transaction(() => {
+    db.insert(round)
+      .values({
+        id: roundId,
+        roomId,
+        presenterParticipantId,
+        deckId,
+        orderIndex: order,
+        state: "preview",
+        startedAt: new Date(),
+      })
+      .run();
+    for (let i = 0; i < slides.length; i++) {
+      db.insert(roundSlide)
+        .values({
+          id: newId(),
+          roundId,
+          slideId: slides[i].id,
+          orderIndex: i,
+          skipped: false,
+        })
+        .run();
+    }
+    db.update(room)
+      .set({
+        state: "round",
+        currentRoundId: roundId,
+        currentDeckVoteId: null,
+      })
+      .where(eq(room.id, roomId))
+      .run();
+  });
+  publish(roomId, {
+    event: "round-state",
+    data: { roundId, state: "preview" },
+  });
+  publish(roomId, {
+    event: "state",
+    data: { state: "round", currentRoundId: roundId },
+  });
+  return { roundId };
+}
+
+async function poolForRandom(
+  hostUserId: string,
+  roomId: string,
+  candidates?: string[]
+): Promise<string[]> {
+  // Decks the host owns + already-used skipped, AND any other ready decks
+  // that have been used in this room before (so a 'random' draw can still
+  // reach them).
+  const owned = await db
+    .select({ id: deck.id })
+    .from(deck)
+    .where(and(eq(deck.ownerId, hostUserId), eq(deck.status, "ready")));
+  const used = await db
+    .select({ id: deck.id })
+    .from(round)
+    .innerJoin(deck, eq(deck.id, round.deckId))
+    .where(eq(round.roomId, roomId));
+
+  const pool = new Set<string>([
+    ...owned.map((o) => o.id),
+    ...used.map((u) => u.id),
+  ]);
+  if (candidates && candidates.length > 0) {
+    return candidates.filter((c) => pool.has(c));
+  }
+  return Array.from(pool);
+}
+
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -95,7 +214,41 @@ export async function POST(
   const action = parsed.data;
 
   switch (action.action) {
-    case "add-round": {
+    case "start-round-manual": {
+      const r = await createRoundForDeck(
+        roomId,
+        action.presenterParticipantId,
+        action.deckId
+      );
+      if ("error" in r)
+        return Response.json({ error: r.error }, { status: r.status });
+      return Response.json({ roundId: r.roundId });
+    }
+
+    case "start-round-random": {
+      const pool = await poolForRandom(
+        guard.user.id,
+        roomId,
+        action.candidateDeckIds
+      );
+      if (pool.length === 0) {
+        return Response.json(
+          { error: "No decks available to pick from" },
+          { status: 400 }
+        );
+      }
+      const pick = pool[Math.floor(Math.random() * pool.length)];
+      const r = await createRoundForDeck(
+        roomId,
+        action.presenterParticipantId,
+        pick
+      );
+      if ("error" in r)
+        return Response.json({ error: r.error }, { status: r.status });
+      return Response.json({ roundId: r.roundId, deckId: pick });
+    }
+
+    case "open-deck-vote": {
       const exists = await db.query.participant.findFirst({
         where: eq(participant.id, action.presenterParticipantId),
       });
@@ -105,77 +258,100 @@ export async function POST(
           { status: 400 }
         );
       }
-      const lastOrder = (
-        await db
-          .select({ orderIndex: round.orderIndex })
-          .from(round)
-          .where(eq(round.roomId, roomId))
-          .orderBy(asc(round.orderIndex))
-      ).at(-1)?.orderIndex;
-      const order = (lastOrder ?? -1) + 1;
-      const roundId = newId();
-      const slides = await db
-        .select()
-        .from(slide)
-        .where(eq(slide.deckId, action.deckId))
-        .orderBy(asc(slide.index));
-      if (slides.length === 0) {
+      const decks = await db
+        .select({ id: deck.id, status: deck.status })
+        .from(deck)
+        .where(inArray(deck.id, action.candidateDeckIds));
+      if (
+        decks.length !== action.candidateDeckIds.length ||
+        decks.some((d) => d.status !== "ready")
+      ) {
         return Response.json(
-          { error: "Deck has no slides" },
+          { error: "One or more candidate decks aren't ready" },
           { status: 400 }
         );
       }
+      const voteId = newId();
       db.transaction(() => {
-        db.insert(round)
+        db.insert(deckVote)
           .values({
-            id: roundId,
+            id: voteId,
             roomId,
             presenterParticipantId: action.presenterParticipantId,
-            deckId: action.deckId,
-            orderIndex: order,
-            state: "queued",
+            candidateDeckIds: action.candidateDeckIds,
           })
           .run();
-        for (let i = 0; i < slides.length; i++) {
-          db.insert(roundSlide)
-            .values({
-              id: newId(),
-              roundId,
-              slideId: slides[i].id,
-              orderIndex: i,
-              skipped: false,
-            })
-            .run();
-        }
-      });
-      publish(roomId, {
-        event: "round-state",
-        data: { roundId, state: "queued" },
-      });
-      return Response.json({ id: roundId });
-    }
-
-    case "start-preview": {
-      const t = await transitionRound(action.roundId, "preview");
-      if ("error" in t)
-        return Response.json({ error: t.error }, { status: t.status });
-      db.update(room)
-        .set({ state: "round", currentRoundId: action.roundId })
-        .where(eq(room.id, roomId))
-        .run();
-      publish(roomId, {
-        event: "round-state",
-        data: { roundId: action.roundId, state: "preview" },
+        db.update(room)
+          .set({
+            state: "deck-vote",
+            currentDeckVoteId: voteId,
+            currentRoundId: null,
+          })
+          .where(eq(room.id, roomId))
+          .run();
       });
       publish(roomId, {
         event: "state",
-        data: { state: "round", currentRoundId: action.roundId },
+        data: { state: "deck-vote", currentDeckVoteId: voteId },
       });
-      return Response.json({ ok: true });
+      return Response.json({ voteId });
+    }
+
+    case "lock-deck-vote": {
+      const v = await db.query.deckVote.findFirst({
+        where: eq(deckVote.id, action.voteId),
+      });
+      if (!v || v.roomId !== roomId)
+        return Response.json({ error: "Vote not found" }, { status: 404 });
+      if (v.closedAt)
+        return Response.json({ error: "Vote already closed" }, { status: 400 });
+
+      const ballots = await db
+        .select()
+        .from(deckVoteBallot)
+        .where(eq(deckVoteBallot.voteId, action.voteId));
+      const tally = new Map<string, number>();
+      for (const did of v.candidateDeckIds) tally.set(did, 0);
+      for (const b of ballots) {
+        if (tally.has(b.deckId)) {
+          tally.set(b.deckId, (tally.get(b.deckId) ?? 0) + 1);
+        }
+      }
+      let topCount = -1;
+      for (const c of tally.values()) topCount = Math.max(topCount, c);
+      const leaders = Array.from(tally.entries())
+        .filter(([, c]) => c === topCount)
+        .map(([d]) => d);
+      // If no one voted (topCount===0), still pick at random among candidates.
+      const winnerDeckId =
+        leaders[Math.floor(Math.random() * leaders.length)] ??
+        v.candidateDeckIds[0];
+
+      db.update(deckVote)
+        .set({ closedAt: new Date(), winnerDeckId })
+        .where(eq(deckVote.id, action.voteId))
+        .run();
+
+      const r = await createRoundForDeck(
+        roomId,
+        v.presenterParticipantId,
+        winnerDeckId
+      );
+      if ("error" in r)
+        return Response.json({ error: r.error }, { status: r.status });
+
+      publish(roomId, {
+        event: "deck-vote-locked",
+        data: {
+          voteId: action.voteId,
+          winnerDeckId,
+          tally: Object.fromEntries(tally),
+        },
+      });
+      return Response.json({ winnerDeckId, roundId: r.roundId, tally: Object.fromEntries(tally) });
     }
 
     case "lock-preview": {
-      // Apply skip votes: mark slides where votes >= threshold% of joined judges
       const r = await db.query.room.findFirst({ where: eq(room.id, roomId) });
       if (!r) return Response.json({ error: "Not found" }, { status: 404 });
       const judges = await db

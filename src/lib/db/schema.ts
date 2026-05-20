@@ -192,11 +192,12 @@ export const room = sqliteTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     state: text("state", {
-      enum: ["lobby", "round", "leaderboard", "ended"],
+      enum: ["lobby", "deck-vote", "round", "leaderboard", "ended"],
     })
       .notNull()
       .default("lobby"),
     currentRoundId: text("current_round_id"),
+    currentDeckVoteId: text("current_deck_vote_id"),
     config: text("config", { mode: "json" })
       .$type<{
         maxRoundSeconds: number;
@@ -232,6 +233,51 @@ export const participant = sqliteTable(
       .default(now),
   },
   (t) => [index("participant_room_idx").on(t.roomId)]
+);
+
+// Group-vote on which deck the presenter gets. Created when the host opens
+// the vote phase; rows in deck_vote_ballot are 1 per (vote, voter).
+export const deckVote = sqliteTable(
+  "deck_vote",
+  {
+    id: text("id").primaryKey(),
+    roomId: text("room_id")
+      .notNull()
+      .references(() => room.id, { onDelete: "cascade" }),
+    presenterParticipantId: text("presenter_participant_id")
+      .notNull()
+      .references(() => participant.id, { onDelete: "cascade" }),
+    candidateDeckIds: text("candidate_deck_ids", { mode: "json" })
+      .$type<string[]>()
+      .notNull(),
+    winnerDeckId: text("winner_deck_id").references(() => deck.id, {
+      onDelete: "set null",
+    }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .default(now),
+    closedAt: integer("closed_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [index("deck_vote_room_idx").on(t.roomId)]
+);
+
+export const deckVoteBallot = sqliteTable(
+  "deck_vote_ballot",
+  {
+    voteId: text("vote_id")
+      .notNull()
+      .references(() => deckVote.id, { onDelete: "cascade" }),
+    participantId: text("participant_id")
+      .notNull()
+      .references(() => participant.id, { onDelete: "cascade" }),
+    deckId: text("deck_id")
+      .notNull()
+      .references(() => deck.id, { onDelete: "cascade" }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .default(now),
+  },
+  (t) => [primaryKey({ columns: [t.voteId, t.participantId] })]
 );
 
 export const round = sqliteTable(

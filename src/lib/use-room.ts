@@ -1,6 +1,27 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 
+export type RoundComment = { from: string; text: string };
+
+export type RoundResults = {
+  roundId: string;
+  presenter: { id: string; displayName: string };
+  deckTitle: string;
+  byCriterion: Array<{ criterion: string; mean: number; count: number }>;
+  overall: number;
+  judgeCount: number;
+  comments: RoundComment[];
+};
+
+export type LeaderboardRow = {
+  participantId: string;
+  displayName: string;
+  overall: number;
+  rounds: number;
+  byCriterion: Record<string, number>;
+  comments: RoundComment[];
+};
+
 export type RoomData = {
   room: {
     id: string;
@@ -50,13 +71,22 @@ export type RoomData = {
     currentSlideIndex: number;
   } | null;
   skipVoteTallies?: Record<string, number>;
-  leaderboard?: Array<{
-    participantId: string;
-    displayName: string;
-    overall: number;
-    rounds: number;
-    byCriterion: Record<string, number>;
-  }>;
+  leaderboard?: LeaderboardRow[];
+  lastResults?: RoundResults | null;
+  currentDeckVote?: {
+    id: string;
+    presenterParticipantId: string;
+    candidates: Array<{
+      id: string;
+      title: string;
+      description: string | null;
+      slideCount: number;
+      source: string;
+      spiceLevel: string;
+    }>;
+    tally: Record<string, number>;
+    totalBallots: number;
+  } | null;
 };
 
 export function useRoom(roomId: string | null) {
@@ -67,13 +97,8 @@ export function useRoom(roomId: string | null) {
     received: number;
     total: number;
   } | null>(null);
-  const [leaderboard, setLeaderboard] = useState<Array<{
-    participantId: string;
-    displayName: string;
-    overall: number;
-    rounds: number;
-    byCriterion: Record<string, number>;
-  }> | null>(null);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardRow[] | null>(null);
+  const [results, setResults] = useState<RoundResults | null>(null);
   const evtRef = useRef<EventSource | null>(null);
 
   const fetchState = async () => {
@@ -88,6 +113,9 @@ export function useRoom(roomId: string | null) {
       if (j.leaderboard && j.leaderboard.length > 0) {
         setLeaderboard(j.leaderboard);
       }
+      if (j.lastResults) {
+        setResults(j.lastResults);
+      }
       setLoading(false);
     } else {
       setLoading(false);
@@ -100,12 +128,8 @@ export function useRoom(roomId: string | null) {
     const es = new EventSource(`/api/rooms/${roomId}/events`);
     evtRef.current = es;
 
-    es.addEventListener("state", (e) => {
-      fetchState();
-    });
-    es.addEventListener("round-state", (e) => {
-      fetchState();
-    });
+    es.addEventListener("state", () => fetchState());
+    es.addEventListener("round-state", () => fetchState());
     es.addEventListener("slide-change", (e) => {
       const d = JSON.parse((e as MessageEvent).data);
       setData((prev) =>
@@ -124,31 +148,34 @@ export function useRoom(roomId: string | null) {
       const d = JSON.parse((e as MessageEvent).data);
       setSkipVotes((prev) => ({ ...prev, [d.slideId]: d.totalVotes }));
     });
-    es.addEventListener("slide-locked", () => {
-      fetchState();
-    });
+    es.addEventListener("slide-locked", () => fetchState());
     es.addEventListener("rating-count", (e) => {
       const d = JSON.parse((e as MessageEvent).data);
       setRatingProgress({ received: d.received, total: d.total });
     });
     es.addEventListener("results", (e) => {
-      // results event fires when a round ends — refetch to be safe
+      try {
+        const d = JSON.parse((e as MessageEvent).data) as RoundResults;
+        setResults(d);
+      } catch {
+        /* */
+      }
       fetchState();
     });
+    es.addEventListener("deck-vote-tally", () => fetchState());
+    es.addEventListener("deck-vote-locked", () => fetchState());
     es.addEventListener("leaderboard", (e) => {
       try {
-        const d = JSON.parse((e as MessageEvent).data);
+        const d = JSON.parse((e as MessageEvent).data) as LeaderboardRow[];
         setLeaderboard(d);
       } catch {
         /* */
       }
     });
-    es.addEventListener("participant", () => {
-      fetchState();
-    });
+    es.addEventListener("participant", () => fetchState());
 
     es.onerror = () => {
-      // Auto-reconnect is built-in; nothing to do.
+      // EventSource auto-reconnects on its own.
     };
 
     return () => {
@@ -157,5 +184,13 @@ export function useRoom(roomId: string | null) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
 
-  return { data, loading, skipVotes, ratingProgress, leaderboard, refetch: fetchState };
+  return {
+    data,
+    loading,
+    skipVotes,
+    ratingProgress,
+    leaderboard,
+    results,
+    refetch: fetchState,
+  };
 }

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRoom } from "@/lib/use-room";
 import { JoinName } from "@/components/JoinName";
 import { PreviewCurator } from "@/components/PreviewCurator";
@@ -50,6 +50,14 @@ export function ParticipantApp({
       {/* Lobby (no round in progress) */}
       {!round && data.room.state === "lobby" && (
         <Lobby participants={data.participants} />
+      )}
+
+      {/* Deck vote */}
+      {data.room.state === "deck-vote" && data.currentDeckVote && (
+        <DeckVoteBallot
+          vote={data.currentDeckVote}
+          meId={me.id}
+        />
       )}
 
       {/* Preview phase */}
@@ -240,6 +248,9 @@ function ParticipantLeaderboard({
   return (
     <div className="card p-6">
       <div className="display text-3xl">Leaderboard</div>
+      <p className="text-xs text-mute mt-1">
+        Full breakdown is up on the big screen.
+      </p>
       <ul className="mt-4 divide-y">
         {leaderboard.map((row, i) => (
           <li
@@ -256,6 +267,111 @@ function ParticipantLeaderboard({
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+function DeckVoteBallot({
+  vote,
+  meId,
+}: {
+  vote: NonNullable<
+    NonNullable<ReturnType<typeof useRoom>["data"]>["currentDeckVote"]
+  >;
+  meId: string;
+}) {
+  const [pick, setPick] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const isPresenter = meId === vote.presenterParticipantId;
+
+  if (isPresenter) {
+    return (
+      <div className="card p-8 text-center">
+        <div className="text-xs uppercase tracking-widest text-mute">
+          Up next
+        </div>
+        <div className="display text-4xl mt-3">You&apos;re on.</div>
+        <p className="text-sm text-mute mt-3">
+          The room is voting on what cursed deck you&apos;ll improvise. Don&apos;t
+          peek at anyone else&apos;s phone.
+        </p>
+      </div>
+    );
+  }
+
+  const cast = async (deckId: string) => {
+    setSubmitting(true);
+    setError(null);
+    setPick(deckId);
+    const res = await fetch(`/api/deck-votes/${vote.id}/cast`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deckId }),
+    });
+    setSubmitting(false);
+    if (!res.ok) {
+      setError("Couldn't submit your vote.");
+      setPick(null);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="card p-5">
+        <div className="text-xs uppercase tracking-widest text-mute">
+          Vote for the deck
+        </div>
+        <div className="display text-2xl mt-1">Pick something cursed.</div>
+        <p className="text-sm text-mute mt-2">
+          Tap one. You can change your mind until the host locks the vote.
+        </p>
+      </div>
+      <ul className="space-y-2">
+        {vote.candidates.map((c) => {
+          const votes = vote.tally[c.id] ?? 0;
+          const mine = pick === c.id;
+          return (
+            <li
+              key={c.id}
+              className={`card flex items-center gap-3 p-3 transition ${
+                mine ? "ring-2 ring-flame" : ""
+              }`}
+            >
+              <div className="aspect-video w-24 rounded-lg bg-canvas-2 overflow-hidden relative shrink-0">
+                <SlideRender
+                  deckId={c.id}
+                  src={`decks/${c.id}/thumb.png`}
+                  kind="image"
+                  fit="cover"
+                  inert
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-medium truncate">{c.title}</div>
+                <div className="text-xs text-mute font-mono mt-0.5">
+                  {c.slideCount}sl · {c.spiceLevel}
+                </div>
+              </div>
+              <button
+                disabled={submitting}
+                onClick={() => cast(c.id)}
+                className={`btn shrink-0 text-xs px-3 py-2 ${
+                  mine ? "btn-flame" : "btn-ghost"
+                }`}
+              >
+                {mine ? "✓ voted" : `Vote · ${votes}`}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {error && <p className="text-sm text-chili">{error}</p>}
+      <p className="text-xs text-mute text-center pt-1">
+        {vote.totalBallots} {vote.totalBallots === 1 ? "vote" : "votes"} cast so
+        far.
+      </p>
     </div>
   );
 }

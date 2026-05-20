@@ -15,6 +15,13 @@
       "when": 1779275401800,
       "tag": "0001_curved_wild_pack",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1779276890704,
+      "tag": "0002_condemned_valkyrie",
+      "breakpoints": true
     }
   ]
 }

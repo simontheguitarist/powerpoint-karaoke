@@ -1,7 +1,9 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   deck,
+  deckVote,
+  deckVoteBallot,
   participant,
   room,
   round,
@@ -10,7 +12,7 @@ import {
   slideSkipVote,
 } from "@/lib/db/schema";
 import { getParticipantCookie } from "@/lib/rooms/participant-cookie";
-import { leaderboard } from "@/lib/rooms/scoring";
+import { leaderboard, scoreRound } from "@/lib/rooms/scoring";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -86,21 +88,76 @@ export async function GET(
     }
   }
 
-  // Live skip-vote tally for the current round (preview phase resumes after reload)
+  // Live skip-vote tally for the current round
   const skipVoteTallies: Record<string, number> = {};
   if (currentRound) {
-    const rsIds = currentRound.slides.map((s) => s.id);
-    if (rsIds.length > 0) {
-      for (const s of currentRound.slides) {
-        const votes = await db
-          .select()
-          .from(slideSkipVote)
-          .where(eq(slideSkipVote.roundSlideId, s.id));
-        if (votes.length > 0) {
-          skipVoteTallies[s.slideId] = votes.length;
-        }
-      }
+    for (const s of currentRound.slides) {
+      const votes = await db
+        .select()
+        .from(slideSkipVote)
+        .where(eq(slideSkipVote.roundSlideId, s.id));
+      if (votes.length > 0) skipVoteTallies[s.slideId] = votes.length;
     }
+  }
+
+  // Active deck vote (if any)
+  let currentDeckVote: null | {
+    id: string;
+    presenterParticipantId: string;
+    candidates: Array<{
+      id: string;
+      title: string;
+      description: string | null;
+      slideCount: number;
+      source: string;
+      spiceLevel: string;
+    }>;
+    tally: Record<string, number>;
+    totalBallots: number;
+  } = null;
+  if (r.currentDeckVoteId) {
+    const v = await db.query.deckVote.findFirst({
+      where: eq(deckVote.id, r.currentDeckVoteId),
+    });
+    if (v && !v.closedAt) {
+      const cands = v.candidateDeckIds.length
+        ? await db
+            .select({
+              id: deck.id,
+              title: deck.title,
+              description: deck.description,
+              slideCount: deck.slideCount,
+              source: deck.source,
+              spiceLevel: deck.spiceLevel,
+            })
+            .from(deck)
+            .where(inArray(deck.id, v.candidateDeckIds))
+            .orderBy(desc(deck.createdAt))
+        : [];
+      const ballots = await db
+        .select()
+        .from(deckVoteBallot)
+        .where(eq(deckVoteBallot.voteId, v.id));
+      const tally: Record<string, number> = {};
+      for (const id of v.candidateDeckIds) tally[id] = 0;
+      for (const b of ballots) {
+        if (tally[b.deckId] !== undefined) tally[b.deckId] += 1;
+      }
+      currentDeckVote = {
+        id: v.id,
+        presenterParticipantId: v.presenterParticipantId,
+        candidates: cands,
+        tally,
+        totalBallots: ballots.length,
+      };
+    }
+  }
+
+  // Last round results (for re-renders during/after the reveal)
+  let lastResults = null;
+  const lastDoneRound = rounds.filter((rr) => rr.state === "done").at(-1);
+  if (lastDoneRound) {
+    lastResults = await scoreRound(lastDoneRound.id);
   }
 
   // Leaderboard (always include if there's any completed round)
@@ -113,7 +170,9 @@ export async function GET(
     rounds,
     me,
     currentRound,
+    currentDeckVote,
     skipVoteTallies,
     leaderboard: board,
+    lastResults,
   });
 }

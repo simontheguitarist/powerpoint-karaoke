@@ -1,29 +1,12 @@
-import { notFound } from "next/navigation";
-import { eq } from "drizzle-orm";
-import { db } from "@/lib/db";
-import { room } from "@/lib/db/schema";
-import { ProjectorView } from "@/components/ProjectorView";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export async function generateMetadata({
+// Legacy projector URL: there's now a single front-of-room screen at
+// /play/host/<id>. Redirect anyone who lands here from old links.
+export default async function ProjectorRedirect({
   params,
 }: {
   params: Promise<{ roomId: string }>;
 }) {
   const { roomId } = await params;
-  const r = await db.query.room.findFirst({ where: eq(room.id, roomId) });
-  return { title: r ? `Projector · ${r.code}` : "Projector" };
-}
-
-export default async function ProjectorPage({
-  params,
-}: {
-  params: Promise<{ roomId: string }>;
-}) {
-  const { roomId } = await params;
-  const r = await db.query.room.findFirst({ where: eq(room.id, roomId) });
-  if (!r) notFound();
-
-  return <ProjectorView roomId={roomId} code={r.code} />;
+  redirect(`/play/host/${roomId}`);
 }

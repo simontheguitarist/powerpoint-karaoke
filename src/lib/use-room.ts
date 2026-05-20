@@ -26,8 +26,9 @@ export type RoomData = {
   room: {
     id: string;
     code: string;
-    state: "lobby" | "round" | "leaderboard" | "ended";
+    state: "lobby" | "deck-vote" | "round" | "leaderboard" | "ended";
     currentRoundId: string | null;
+    currentDeckVoteId: string | null;
     hostUserId: string;
     config: {
       maxRoundSeconds: number;

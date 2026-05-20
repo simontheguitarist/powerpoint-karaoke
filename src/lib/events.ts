@@ -20,6 +20,8 @@ export type RoomEvent =
   | { event: "results"; data: unknown }
   | { event: "leaderboard"; data: unknown }
   | { event: "participant"; data: unknown }
+  | { event: "deck-vote-tally"; data: unknown }
+  | { event: "deck-vote-locked"; data: unknown }
   | { event: "ping"; data: unknown };
 
 export function subscribe(roomId: string, write: Writer): () => void {

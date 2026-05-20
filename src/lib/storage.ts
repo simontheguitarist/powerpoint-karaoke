@@ -1,12 +1,22 @@
 import fs from "node:fs";
 import path from "node:path";
 
-export const STORAGE_ROOT = path.resolve(
-  process.env.STORAGE_DIR ?? "./storage"
-);
+// STORAGE_DIR comes from env at runtime. We compute the absolute root
+// inside a function so the path.resolve happens at call time, not module
+// load — and we use a turbopackIgnore comment so Next's file tracer
+// doesn't conclude that the whole project should be bundled.
+let cachedRoot: string | null = null;
+export function storageRoot(): string {
+  if (cachedRoot) return cachedRoot;
+  const raw = process.env.STORAGE_DIR ?? "./storage";
+  cachedRoot = path.isAbsolute(raw)
+    ? raw
+    : path.join(/*turbopackIgnore: true*/ process.cwd(), raw);
+  return cachedRoot;
+}
 
 export function deckDir(deckId: string) {
-  return path.join(STORAGE_ROOT, "decks", deckId);
+  return path.join(storageRoot(), "decks", deckId);
 }
 
 export function deckSlidesDir(deckId: string) {
@@ -28,14 +38,13 @@ export async function ensureDeckDirs(deckId: string) {
 
 /**
  * Resolve a user-supplied storage path and refuse anything that escapes
- * STORAGE_ROOT. Returns the absolute path on success, throws on traversal.
+ * the storage root. Returns the absolute path on success, throws on traversal.
  */
 export function safeResolve(rel: string): string {
-  const abs = path.resolve(STORAGE_ROOT, rel);
-  const root = STORAGE_ROOT.endsWith(path.sep)
-    ? STORAGE_ROOT
-    : STORAGE_ROOT + path.sep;
-  if (abs !== STORAGE_ROOT && !abs.startsWith(root)) {
+  const root = storageRoot();
+  const abs = path.resolve(root, rel);
+  const rootWithSep = root.endsWith(path.sep) ? root : root + path.sep;
+  if (abs !== root && !abs.startsWith(rootWithSep)) {
     throw new Error(`path escapes storage root: ${rel}`);
   }
   return abs;

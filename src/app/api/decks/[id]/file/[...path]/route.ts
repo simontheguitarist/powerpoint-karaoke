@@ -3,7 +3,7 @@ import path from "node:path";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { deck } from "@/lib/db/schema";
-import { deckDir, safeResolve } from "@/lib/storage";
+import { deckDir } from "@/lib/storage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +13,9 @@ const MIME: Record<string, string> = {
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
   ".webp": "image/webp",
+  ".gif": "image/gif",
   ".html": "text/html; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
 };
 
 export async function GET(
@@ -25,14 +27,23 @@ export async function GET(
   const d = await db.query.deck.findFirst({ where: eq(deck.id, id) });
   if (!d) return new Response("Not found", { status: 404 });
 
+  // Block traversal in the user-supplied path segments
+  for (const seg of segs) {
+    if (seg === ".." || seg.includes("/") || seg.includes("\\")) {
+      return new Response("Forbidden", { status: 403 });
+    }
+  }
   const rel = segs.join("/");
   if (rel.includes("..") || path.isAbsolute(rel)) {
     return new Response("Forbidden", { status: 403 });
   }
-  const abs = path.resolve(deckDir(id), rel);
-  try {
-    safeResolve(path.relative(process.cwd(), abs));
-  } catch {
+
+  const base = deckDir(id);
+  const abs = path.resolve(base, rel);
+
+  // The resolved path must remain inside the deck's own directory.
+  const baseWithSep = base.endsWith(path.sep) ? base : base + path.sep;
+  if (abs !== base && !abs.startsWith(baseWithSep)) {
     return new Response("Forbidden", { status: 403 });
   }
 
@@ -45,7 +56,7 @@ export async function GET(
       headers: {
         "Content-Type": MIME[ext] ?? "application/octet-stream",
         "Content-Length": String(stat.size),
-        "Cache-Control": "public, max-age=300",
+        "Cache-Control": "public, max-age=300, immutable",
       },
     });
   } catch {

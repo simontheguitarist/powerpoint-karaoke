@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { SlideRender } from "@/components/SlideRender";
 
 type Round = {
   id: string;
@@ -115,24 +116,31 @@ function SlideMini({
   src: string;
   kind: "image" | "html";
 }) {
-  const url = `/api/decks/${deckId}/file/${src.replace(/^decks\/[^/]+\//, "")}`;
-  return kind === "image" ? (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={url} alt="" className="absolute inset-0 size-full object-cover" />
-  ) : (
-    <div className="absolute inset-0 overflow-hidden">
-      <iframe
-        src={url}
-        sandbox="allow-same-origin"
-        loading="lazy"
-        className="absolute origin-top-left pointer-events-none"
-        style={{
-          width: 1280,
-          height: 720,
-          transform: "scale(0.075)",
-          transformOrigin: "top left",
-        }}
-      />
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(0);
+
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const update = () => {
+      const w = el.getBoundingClientRect().width;
+      if (w > 0) setScale(w / 1280);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  return (
+    <div ref={wrapRef} className="absolute inset-0 overflow-hidden">
+      {kind === "image" ? (
+        <SlideRender deckId={deckId} src={src} kind="image" fit="cover" inert />
+      ) : scale > 0 ? (
+        <SlideRender deckId={deckId} src={src} kind="html" scale={scale} inert />
+      ) : (
+        <div className="absolute inset-0 shimmer" />
+      )}
     </div>
   );
 }

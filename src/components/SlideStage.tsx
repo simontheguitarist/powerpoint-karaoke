@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { SlideRender } from "@/components/SlideRender";
 
 export function SlideStage({
   deckId,
@@ -13,13 +14,14 @@ export function SlideStage({
   fit?: "contain" | "cover";
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
+  const [scale, setScale] = useState(0);
 
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
     const update = () => {
       const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) return;
       const s =
         fit === "cover"
           ? Math.max(r.width / 1280, r.height / 720)
@@ -32,37 +34,35 @@ export function SlideStage({
     return () => ro.disconnect();
   }, [fit]);
 
-  const url = `/api/decks/${deckId}/file/${src.replace(/^decks\/[^/]+\//, "")}`;
-
   return (
     <div
       ref={wrapRef}
       className="relative size-full overflow-hidden bg-black grid place-items-center"
     >
       {kind === "image" ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={url}
-          alt=""
-          className="size-full"
-          style={{ objectFit: fit }}
+        <SlideRender
+          deckId={deckId}
+          src={src}
+          kind="image"
+          fit={fit}
+          theme="dark"
         />
-      ) : (
+      ) : scale > 0 ? (
         <div
-          style={{
-            width: 1280,
-            height: 720,
-            transform: `scale(${scale})`,
-            transformOrigin: "center",
-          }}
-          className="relative shrink-0"
+          className="relative"
+          style={{ width: 1280 * scale, height: 720 * scale }}
         >
-          <iframe
-            src={url}
-            sandbox="allow-same-origin"
-            className="size-full block"
+          <SlideRender
+            deckId={deckId}
+            src={src}
+            kind="html"
+            scale={scale}
+            inert
+            theme="dark"
           />
         </div>
+      ) : (
+        <div className="absolute inset-0 shimmer-dark" />
       )}
     </div>
   );

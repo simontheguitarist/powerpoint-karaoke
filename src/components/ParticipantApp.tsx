@@ -1,9 +1,10 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRoom } from "@/lib/use-room";
 import { JoinName } from "@/components/JoinName";
 import { PreviewCurator } from "@/components/PreviewCurator";
 import { RubricForm } from "@/components/RubricForm";
+import { SlideRender } from "@/components/SlideRender";
 
 export function ParticipantApp({
   roomId,
@@ -188,24 +189,31 @@ function SlidePeek({
   src: string;
   kind: "image" | "html";
 }) {
-  const url = `/api/decks/${deckId}/file/${src.replace(/^decks\/[^/]+\//, "")}`;
-  return kind === "image" ? (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={url} alt="" className="size-full object-cover" />
-  ) : (
-    <div className="relative size-full overflow-hidden">
-      <iframe
-        src={url}
-        sandbox="allow-same-origin"
-        loading="lazy"
-        className="absolute origin-top-left pointer-events-none"
-        style={{
-          width: 1280,
-          height: 720,
-          transform: "scale(0.3)",
-          transformOrigin: "top left",
-        }}
-      />
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(0);
+
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const update = () => {
+      const w = el.getBoundingClientRect().width;
+      if (w > 0) setScale(w / 1280);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  return (
+    <div ref={wrapRef} className="relative size-full overflow-hidden">
+      {kind === "image" ? (
+        <SlideRender deckId={deckId} src={src} kind="image" fit="cover" inert />
+      ) : scale > 0 ? (
+        <SlideRender deckId={deckId} src={src} kind="html" scale={scale} inert />
+      ) : (
+        <div className="absolute inset-0 shimmer" />
+      )}
     </div>
   );
 }

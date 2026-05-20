@@ -2,13 +2,19 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export function StartGameButton({ deckId }: { deckId: string }) {
+export function HostStartButton({
+  className = "btn btn-flame",
+  label = "Open a room",
+}: {
+  className?: string;
+  label?: string;
+}) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   return (
-    <>
+    <div>
       <button
         disabled={loading}
         onClick={async () => {
@@ -17,27 +23,26 @@ export function StartGameButton({ deckId }: { deckId: string }) {
           const res = await fetch("/api/rooms", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ deckId }),
+            body: JSON.stringify({}),
           });
           if (!res.ok) {
             setLoading(false);
             if (res.status === 401) {
-              router.push("/sign-in?next=/library/" + deckId);
+              router.push("/sign-in");
               return;
             }
-            const data = await res.json().catch(() => ({}));
-            setError(data?.error ?? "Couldn't start the game.");
+            const j = await res.json().catch(() => ({}));
+            setError(j?.error ?? "Couldn't open a room.");
             return;
           }
           const { id } = await res.json();
-          // Forward the chosen deck so the lobby's setup card preselects it.
-          router.push(`/play/host/${id}?deck=${encodeURIComponent(deckId)}`);
+          router.push(`/play/host/${id}`);
         }}
-        className="btn btn-flame w-full disabled:opacity-50"
+        className={`${className} disabled:opacity-50`}
       >
-        {loading ? "Starting…" : "Host a game with this deck"}
+        {loading ? "Opening…" : label}
       </button>
       {error && <p className="text-sm text-chili mt-2">{error}</p>}
-    </>
+    </div>
   );
 }

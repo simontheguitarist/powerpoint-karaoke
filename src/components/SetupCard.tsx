@@ -11,12 +11,14 @@ export function SetupCard({
   players,
   busy,
   onAction,
+  initialDeckId,
 }: {
   roomId: string;
   myDecks: Deck[];
   players: Array<{ id: string; displayName: string; role: "host" | "player" }>;
   busy: boolean;
   onAction: (body: object) => Promise<unknown>;
+  initialDeckId?: string | null;
 }) {
   const readyDecks = myDecks.filter((d) => d.status === "ready");
   const [presenter, setPresenter] = useState("");
@@ -29,10 +31,17 @@ export function SetupCard({
     setPresenter(players[0].id);
   }, [players, presenter]);
 
+  // Preselect the deck passed in via URL (?deck=...) if it's in this user's
+  // ready set. Otherwise fall back to the first ready deck.
   useEffect(() => {
-    if (deckId || readyDecks.length === 0) return;
-    setDeckId(readyDecks[0].id);
-  }, [readyDecks, deckId]);
+    if (deckId) return;
+    if (readyDecks.length === 0) return;
+    if (initialDeckId && readyDecks.some((d) => d.id === initialDeckId)) {
+      setDeckId(initialDeckId);
+    } else {
+      setDeckId(readyDecks[0].id);
+    }
+  }, [readyDecks, deckId, initialDeckId]);
 
   const start = async () => {
     if (!presenter) return;
@@ -64,10 +73,9 @@ export function SetupCard({
     }
   };
 
-  const sortedPlayers = [...players].sort((a, b) => {
-    if (a.role === b.role) return a.displayName.localeCompare(b.displayName);
-    return a.role === "player" ? -1 : 1;
-  });
+  const sortedPlayers = [...players].sort((a, b) =>
+    a.displayName.localeCompare(b.displayName)
+  );
 
   return (
     <div className="card p-7 max-w-2xl mx-auto">
@@ -89,9 +97,14 @@ export function SetupCard({
             <option value="">Pick a presenter…</option>
             {sortedPlayers.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.displayName} {p.role === "host" ? "(you)" : ""}
+                {p.displayName}
               </option>
             ))}
+            {sortedPlayers.length === 0 && (
+              <option disabled value="">
+                Waiting for players to join…
+              </option>
+            )}
           </select>
         </div>
 

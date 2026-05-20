@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRoom } from "@/lib/use-room";
 import type { Deck } from "@/lib/db/schema";
@@ -21,6 +22,8 @@ export function HostStage({
 }) {
   const { data, loading, skipVotes, ratingProgress, leaderboard, results } =
     useRoom(roomId);
+  const searchParams = useSearchParams();
+  const initialDeckId = searchParams.get("deck");
   const [busy, setBusy] = useState(false);
   const [hideControls, setHideControls] = useState(false);
   const [showReveal, setShowReveal] = useState(false);
@@ -47,8 +50,10 @@ export function HostStage({
     data?.participants.find((p) => p.id === round.presenterParticipantId);
   const activeSlides = round?.slides.filter((s) => !s.skipped) ?? [];
   const currentSlide = round ? activeSlides[round.currentSlideIndex] : null;
+  // Host is the MC, never counted as a player. Filter them out everywhere
+  // the UI reads "people in the room" / "who's presenting".
   const players = useMemo(
-    () => (data?.participants ?? []),
+    () => (data?.participants ?? []).filter((p) => p.role === "player"),
     [data?.participants]
   );
 
@@ -157,6 +162,7 @@ export function HostStage({
           myDecks={myDecks}
           busy={busy}
           post={post}
+          initialDeckId={initialDeckId}
         />
       )}
 
@@ -173,9 +179,7 @@ export function HostStage({
           totalBallots={data.currentDeckVote.totalBallots}
           totalVoters={
             players.filter(
-              (p) =>
-                p.role === "player" &&
-                p.id !== data.currentDeckVote!.presenterParticipantId
+              (p) => p.id !== data.currentDeckVote!.presenterParticipantId
             ).length
           }
           isHost
@@ -307,6 +311,7 @@ function LobbyView({
   myDecks,
   busy,
   post,
+  initialDeckId,
 }: {
   code: string;
   joinUrl: string;
@@ -315,6 +320,7 @@ function LobbyView({
   myDecks: Deck[];
   busy: boolean;
   post: (b: object) => Promise<unknown>;
+  initialDeckId?: string | null;
 }) {
   return (
     <div className="absolute inset-0 grid grid-rows-[1fr_auto] pt-16 pb-10 px-6">
@@ -352,6 +358,7 @@ function LobbyView({
               players={players}
               busy={busy}
               onAction={post}
+              initialDeckId={initialDeckId}
             />
           </div>
         </div>
